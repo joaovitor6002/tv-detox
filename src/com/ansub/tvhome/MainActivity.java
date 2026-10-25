@@ -437,7 +437,50 @@ public class MainActivity extends Activity {
     }
 
     private void showWallpaper(int i) {
-        getWindow().setBackgroundDrawable(background(WALLPAPERS[i]));
+        // A photo put in the app's own folder (wallpaper.jpg) wins over the gradients.
+        Drawable photo = customPhoto();
+        getWindow().setBackgroundDrawable(photo != null ? photo : background(WALLPAPERS[i]));
+    }
+
+    private Drawable photoBg;
+    private boolean photoChecked;
+
+    // Your own picture as the background: <app external files dir>/wallpaper.jpg. It is shrunk and
+    // cropped to the screen once (16-bit colour, to save memory), with a dark layer so the clock and
+    // the tiles stay easy to read. Any problem and the gradients are used instead.
+    private Drawable customPhoto() {
+        if (photoChecked) return photoBg;
+        photoChecked = true;
+        try {
+            java.io.File dir = getExternalFilesDir(null);
+            java.io.File f = dir == null ? null : new java.io.File(dir, "wallpaper.jpg");
+            if (f == null || !f.isFile()) return null;
+            int w = Math.max(1, getResources().getDisplayMetrics().widthPixels);
+            int h = Math.max(1, getResources().getDisplayMetrics().heightPixels);
+            android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+            o.inJustDecodeBounds = true;
+            android.graphics.BitmapFactory.decodeFile(f.getPath(), o);
+            if (o.outWidth <= 0 || o.outHeight <= 0) return null;
+            int sample = 1;
+            while (o.outWidth / (sample * 2) >= w && o.outHeight / (sample * 2) >= h) sample *= 2;
+            o.inJustDecodeBounds = false;
+            o.inSampleSize = sample;
+            o.inPreferredConfig = Bitmap.Config.RGB_565;
+            Bitmap src = android.graphics.BitmapFactory.decodeFile(f.getPath(), o);
+            if (src == null) return null;
+            float s = Math.max((float) w / src.getWidth(), (float) h / src.getHeight());
+            Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565);
+            android.graphics.Matrix m = new android.graphics.Matrix();
+            m.postScale(s, s);
+            m.postTranslate((w - src.getWidth() * s) / 2f, (h - src.getHeight() * s) / 2f);
+            new Canvas(out).drawBitmap(src, m, new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG));
+            src.recycle();
+            photoBg = new LayerDrawable(new Drawable[] {
+                    new BitmapDrawable(getResources(), out), new ColorDrawable(0x73000000)});
+        } catch (Throwable t) {
+            photoBg = null;
+        }
+        return photoBg;
     }
 
     // The wallpapers, each with a small dot of its colours. Moving through the list shows each one
